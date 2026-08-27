@@ -93,18 +93,20 @@
 
   <div class="stats">
     <div class="big"><span id="fps">—</span> fps</div>
-    <div class="sub"><span id="count-live">1,500</span> boids on GPU</div>
+    <div class="sub"><span id="count-live">1,500</span> boids · <span data-backend>WebGPU</span></div>
   </div>
 
   <div class="credit">
-    <a href="https://github.com/parag-labs/gpu-flock" target="_blank" rel="noopener">parag-labs/gpu-flock</a> · WebGPU
+    <a href="https://github.com/parag-labs/gpu-flock" target="_blank" rel="noopener">parag-labs/gpu-flock</a> · <span data-backend>WebGPU</span>
   </div>
 
   <div id="fallback" hidden>
     <div class="card">
-      <h2>WebGPU isn't available here</h2>
+      <h2>Can't render here</h2>
       <p id="fallback-reason"></p>
-      <p>gpu-flock renders with <code>WebGPU</code>, which needs a recent <b>Chrome</b> or <b>Edge</b> (114+) or <b>Safari 18+</b>, on a machine with GPU access. The full source is on
+      <p>gpu-flock renders with <code>WebGPU</code> and falls back to <code>WebGL2</code>,
+      but neither is available in this browser. Try a recent <b>Chrome</b> or <b>Edge</b>
+      (113+) or <b>Safari 18+</b> on a machine with GPU access. The full source is on
       <a href="https://github.com/parag-labs/gpu-flock" style="color:var(--accent)">GitHub</a>.</p>
     </div>
   </div>

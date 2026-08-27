@@ -5,6 +5,12 @@
 //   2. a render pass draws one instanced triangle per boid.
 // The boid buffers are ping-ponged so the compute pass never reads a
 // half-updated flock. The CPU only uploads a handful of tunable parameters.
+//
+// If WebGPU is unavailable (old browser, disabled, no GPU) or the GPU device is
+// lost mid-run, gpu-flock falls back to an equivalent WebGL2 renderer so it
+// still animates everywhere. Append ?webgl2 to the URL to force the fallback.
+
+import { initWebGL2 } from "./webgl-fallback.js";
 
 const CLEAR = { r: 0.051, g: 0.067, b: 0.09, a: 1.0 }; // #0d1117-ish
 const WORKGROUP = 64;
@@ -28,6 +34,8 @@ const state = {
   count: 1500,
   pointer: { x: 0, y: 0, force: 0 },
   running: true,
+  stopped: false,
+  backend: null,
   buffers: null,
   fps: { last: performance.now(), frames: 0, value: 0 },
   ping: 0,
@@ -71,25 +79,22 @@ function createParticleBuffers(device, count) {
   return buffers;
 }
 
-async function init() {
+async function initWebGPU() {
   if (!navigator.gpu) {
-    fail("navigator.gpu is undefined — this browser has no WebGPU. Use a recent Chrome/Edge (or Safari 18+).");
-    return;
+    throw new Error("navigator.gpu is undefined (no WebGPU in this browser)");
   }
   let adapter;
   try {
     adapter = await navigator.gpu.requestAdapter();
   } catch (e) {
-    fail("requestAdapter threw: " + e);
-    return;
+    throw new Error("requestAdapter threw: " + e);
   }
   if (!adapter) {
-    fail("No GPU adapter available. WebGPU may be disabled or your GPU is blocklisted.");
-    return;
+    throw new Error("no GPU adapter (WebGPU disabled or GPU blocklisted)");
   }
   const device = await adapter.requestDevice();
   device.lost.then((info) => {
-    if (info.reason !== "destroyed") fail("GPU device was lost: " + info.message);
+    if (info.reason !== "destroyed") onDeviceLost("GPU device was lost: " + info.message);
   });
 
   const canvas = document.getElementById("gfx");
@@ -190,12 +195,16 @@ async function init() {
   state.shapeBuffer = shapeBuffer;
   state.computePipeline = computePipeline;
   state.renderPipeline = renderPipeline;
+  state.backend = "WebGPU";
 
-  resize();
-  window.addEventListener("resize", resize);
-  wireUI();
-  wirePointer();
-  requestAnimationFrame(frame);
+  return {
+    name: "WebGPU",
+    rebuild: state.rebuild,
+    start: () => {
+      state.stopped = false;
+      requestAnimationFrame(frame);
+    },
+  };
 }
 
 function resize() {
@@ -267,6 +276,12 @@ function frame() {
   }
 
   // FPS
+  updateFps();
+
+  requestAnimationFrame(frame);
+}
+
+function updateFps() {
   const f = state.fps;
   f.frames++;
   const now = performance.now();
@@ -277,8 +292,6 @@ function frame() {
     document.getElementById("fps").textContent = f.value;
     document.getElementById("count-live").textContent = state.count.toLocaleString();
   }
-
-  requestAnimationFrame(frame);
 }
 
 function wireUI() {
@@ -338,4 +351,69 @@ function wirePointer() {
   c.addEventListener("contextmenu", (ev) => ev.preventDefault());
 }
 
-init().catch((e) => fail(String(e)));
+function setBackend(name) {
+  document.querySelectorAll("[data-backend]").forEach((el) => (el.textContent = name));
+}
+
+// A canvas can only ever hold one context type, so once WebGPU has (or might
+// have) claimed #gfx we swap in a pristine clone before asking for WebGL2.
+function freshCanvas() {
+  const old = document.getElementById("gfx");
+  const fresh = old.cloneNode(false);
+  old.parentNode.replaceChild(fresh, old);
+  state.canvas = fresh;
+  return fresh;
+}
+
+function startFallback() {
+  const canvas = freshCanvas();
+  const backend = initWebGL2(canvas, state, { updateFps });
+  state.rebuild = backend.rebuild;
+  state.backend = backend.name;
+  return backend;
+}
+
+function onDeviceLost(reason) {
+  if (state.backend !== "WebGPU") return; // already on the fallback
+  state.device = null; // stops the WebGPU frame loop
+  let backend;
+  try {
+    backend = startFallback();
+  } catch (e) {
+    fail(reason + " — and WebGL2 is unavailable: " + (e && e.message ? e.message : e));
+    return;
+  }
+  resize();
+  wirePointer(); // re-bind to the fresh canvas
+  setBackend(backend.name);
+  backend.start();
+}
+
+async function boot() {
+  const forced = /[?&](webgl2?|nogpu|fallback)\b/i.test(location.search);
+  let backend = null;
+  let reason = forced ? "forced by URL" : "";
+  if (!forced) {
+    try {
+      backend = await initWebGPU();
+    } catch (e) {
+      reason = e && e.message ? e.message : String(e);
+    }
+  }
+  if (!backend) {
+    try {
+      backend = startFallback();
+    } catch (e) {
+      fail(reason + " — and WebGL2 is unavailable: " + (e && e.message ? e.message : e));
+      return;
+    }
+  }
+  resize();
+  window.addEventListener("resize", resize);
+  wireUI();
+  wirePointer();
+  setBackend(backend.name);
+  backend.start();
+}
+
+boot();

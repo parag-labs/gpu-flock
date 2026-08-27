@@ -2,7 +2,7 @@
 
 **Thousands of boids, computed *and* rendered entirely on the GPU — with WebGPU compute shaders.**
 
-[**▶ Live demo**](https://parag-labs.github.io/gpu-flock/) · zero dependencies · ~350 lines of JS + WGSL
+[**▶ Live demo**](https://parag-labs.github.io/gpu-flock/) · zero dependencies · WebGPU with an automatic WebGL2 fallback
 
 gpu-flock is a real-time [boids](https://en.wikipedia.org/wiki/Boids) flocking simulation where the
 *entire* per-frame workload lives on the GPU. Each frame, one compute-shader invocation per boid reads
@@ -110,26 +110,44 @@ npx serve .
 
 There is **no build step and no dependencies** — it's plain ES modules, HTML, and WGSL.
 
+## Runs everywhere — WebGL2 fallback
+
+WebGPU is the headline, but you shouldn't hit a dead end on an older browser or a locked-down
+machine. If WebGPU is unavailable — or the GPU device is lost mid-run — gpu-flock automatically falls
+back to an **equivalent WebGL2 renderer** so it keeps animating:
+
+- **Same flock, same look.** The fallback's boids math matches `boids.compute.wgsl` line-for-line, and
+  its GLSL shading matches `boids.render.wgsl`, so the simulation and colors are identical.
+- **Only *where* it runs differs.** The simulation moves to the CPU — with a **uniform spatial grid** so
+  neighbour search stays O(n·k) instead of O(n²) — and WebGL2 draws the same instanced triangles. The
+  boid count is capped in fallback mode to keep the CPU sim smooth.
+- **Honest UI.** The panel shows which backend is live (`WebGPU` or `WebGL2`).
+
+Append **`?webgl2`** to the URL to force the fallback path (handy for comparison or debugging):
+[parag-labs.github.io/gpu-flock/?webgl2](https://parag-labs.github.io/gpu-flock/?webgl2).
+
 ## Browser support
 
-Needs a browser with WebGPU enabled on a machine with GPU access:
+Runs on essentially any modern browser — WebGPU where available, WebGL2 everywhere else:
 
-- **Chrome / Edge 113+** (desktop; Android on recent versions)
-- **Safari 18+** (macOS Sequoia / iOS 18)
-- **Firefox** — behind `dom.webgpu.enabled` / in Nightly
+- **WebGPU (primary):** Chrome / Edge 113+, Safari 18+ (macOS Sequoia / iOS 18), Firefox behind
+  `dom.webgpu.enabled` / Nightly — on a machine with GPU access.
+- **WebGL2 (fallback):** every current desktop and mobile browser.
 
-You can check support at [webgpureport.org](https://webgpureport.org). Without WebGPU, gpu-flock shows a
-short explainer instead of the canvas.
+You can check WebGPU support at [webgpureport.org](https://webgpureport.org). The only time gpu-flock
+shows a static explainer instead of the canvas is the rare case where *both* WebGPU and WebGL2 are
+unavailable.
 
 ## Project structure
 
 ```
 gpu-flock/
-├── index.html                 UI, styling, and the WebGPU-unavailable fallback
+├── index.html                 UI, styling, and the last-resort fallback card
 ├── src/
-│   ├── main.js                WebGPU driver: device, buffers, pipelines, loop, UI
-│   ├── boids.compute.wgsl     flocking update (one thread per boid)
-│   └── boids.render.wgsl      instanced, velocity-oriented, speed-tinted triangles
+│   ├── main.js                backend orchestrator + WebGPU driver: device, buffers, pipelines, loop, UI
+│   ├── boids.compute.wgsl     WebGPU flocking update (one thread per boid)
+│   ├── boids.render.wgsl      WebGPU instanced, velocity-oriented, speed-tinted triangles
+│   └── webgl-fallback.js      WebGL2 fallback: CPU sim (spatial grid) + instanced render, same look
 └── .github/workflows/pages.yml   deploys the demo to GitHub Pages
 ```
 
