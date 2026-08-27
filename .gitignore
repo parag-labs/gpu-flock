@@ -1,0 +1,14 @@
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Node (only used for local static serving / tooling)
+node_modules/
+npm-debug.log*
+
+# Local build/scratch
+dist/
+*.log

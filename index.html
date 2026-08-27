@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>gpu-flock — a WebGPU boids flocking simulation</title>
+<meta name="description" content="Thousands of boids computed and rendered entirely on the GPU with WebGPU compute shaders." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230d1117'/%3E%3Cpath d='M16 7 L25 25 L16 20 L7 25 Z' fill='%2358a6ff'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22cc; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  #gfx { width: 100%; height: 100%; display: block; }
+
+  .panel {
+    position: fixed; top: 16px; left: 16px; width: 268px; z-index: 5;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    backdrop-filter: blur(8px); padding: 16px 16px 14px;
+  }
+  .panel h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .panel h1 .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); }
+  .panel .tag { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin: 10px 0 3px; }
+  .row .v { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .buttons { display: flex; gap: 8px; margin-top: 14px; }
+  .buttons button {
+    flex: 1; background: #21262d; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 0; font-size: 13px; cursor: pointer;
+  }
+  .buttons button:hover { border-color: var(--accent); }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+  .hint kbd { background: #21262d; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 11px; }
+
+  .stats {
+    position: fixed; top: 16px; right: 16px; z-index: 5; text-align: right;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .stats .big { font-size: 26px; font-weight: 700; }
+  .stats .big span { color: var(--green); }
+  .stats .sub { font-size: 12px; color: var(--muted); }
+
+  .credit { position: fixed; bottom: 14px; left: 16px; z-index: 5; font-size: 12px; color: var(--muted); }
+  .credit a { color: var(--accent); text-decoration: none; }
+
+  #fallback {
+    position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    padding: 24px; background: radial-gradient(1000px 600px at 50% 30%, #161b22, #0d1117);
+  }
+  #fallback .card { max-width: 520px; border: 1px solid var(--border); border-radius: 14px; padding: 28px 30px; background: #161b22; }
+  #fallback h2 { margin: 0 0 8px; }
+  #fallback p { color: var(--muted); line-height: 1.6; }
+  #fallback code { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gfx"></canvas>
+  </div>
+
+  <div class="panel">
+    <h1><span class="mono">gpu-flock</span></h1>
+    <p class="tag">Boids, computed &amp; drawn entirely on the GPU</p>
+
+    <div class="row"><label for="count">Boids</label><span class="v" id="count-val">1,500</span></div>
+    <input type="range" id="count" min="200" max="8000" step="100" value="1500" />
+
+    <div class="row"><label for="speed">Speed</label><span class="v" id="speed-val">1.0x</span></div>
+    <input type="range" id="speed" min="0.1" max="2.5" step="0.1" value="1.0" />
+
+    <div class="row"><label for="cohesion">Cohesion</label><span class="v" id="cohesion-val">18</span></div>
+    <input type="range" id="cohesion" min="0" max="60" step="1" value="18" />
+
+    <div class="row"><label for="separation">Separation</label><span class="v" id="separation-val">50</span></div>
+    <input type="range" id="separation" min="0" max="120" step="1" value="50" />
+
+    <div class="row"><label for="alignment">Alignment</label><span class="v" id="alignment-val">60</span></div>
+    <input type="range" id="alignment" min="0" max="120" step="1" value="60" />
+
+    <div class="buttons">
+      <button id="pause">Pause</button>
+      <button id="reset">Reset</button>
+    </div>
+
+    <p class="hint"><b>Left-drag</b> to attract · <b>Right-drag</b> to scatter. Every boid reads the whole flock each frame in a compute shader.</p>
+  </div>
+
+  <div class="stats">
+    <div class="big"><span id="fps">—</span> fps</div>
+    <div class="sub"><span id="count-live">1,500</span> boids on GPU</div>
+  </div>
+
+  <div class="credit">
+    <a href="https://github.com/parag-labs/gpu-flock" target="_blank" rel="noopener">parag-labs/gpu-flock</a> · WebGPU
+  </div>
+
+  <div id="fallback" hidden>
+    <div class="card">
+      <h2>WebGPU isn't available here</h2>
+      <p id="fallback-reason"></p>
+      <p>gpu-flock renders with <code>WebGPU</code>, which needs a recent <b>Chrome</b> or <b>Edge</b> (114+) or <b>Safari 18+</b>, on a machine with GPU access. The full source is on
+      <a href="https://github.com/parag-labs/gpu-flock" style="color:var(--accent)">GitHub</a>.</p>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
