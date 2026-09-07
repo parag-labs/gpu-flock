@@ -48,6 +48,21 @@ shows up in physics, particle systems, ML kernels, and simulation.
 
 ## How it works
 
+
+```mermaid
+flowchart LR
+  classDef proc fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a
+  classDef good fill:#f0fdf4,stroke:#22c55e,color:#14532d
+  classDef work fill:#faf5ff,stroke:#a855f7,color:#581c87
+  classDef store fill:#f0f9ff,stroke:#0ea5e9,color:#0c4a6e
+  A[("Buffer A")]:::store
+  COMPUTE["Compute pass<br/>(one thread / boid)"]:::work
+  B[("Buffer B")]:::store
+  RENDER["Render pass"]:::good
+  A -->|read| COMPUTE -->|write| B --> RENDER
+  B -.->|swap each frame| A
+```
+
 ```
                 per frame
    ┌────────────────────────────────────────────────┐
