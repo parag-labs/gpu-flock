@@ -1,0 +1,17 @@
+name: Validate shaders
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  naga:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install naga-cli
+        run: cargo install naga-cli --locked
+      # Validate every WGSL shader the same way wgpu would when loading it.
+      - run: naga src/boids.compute.wgsl
+      - run: naga src/boids.render.wgsl

@@ -163,11 +163,22 @@ gpu-flock/
 │   ├── boids.compute.wgsl     WebGPU flocking update (one thread per boid)
 │   ├── boids.render.wgsl      WebGPU instanced, velocity-oriented, speed-tinted triangles
 │   └── webgl-fallback.js      WebGL2 fallback: CPU sim (spatial grid) + instanced render, same look
-└── .github/workflows/pages.yml   deploys the demo to GitHub Pages
+├── DESIGN.md                  the O(n²)-on-GPU trade-off, the fallback design, and the non-goals
+└── .github/workflows/
+    ├── pages.yml              deploys the demo to GitHub Pages
+    └── validate.yml           validates every WGSL shader with naga on each push/PR
 ```
 
-The WGSL shaders are validated in CI-friendly isolation with
-[`naga`](https://github.com/gfx-rs/wgpu/tree/trunk/naga) (the same shader translator wgpu uses).
+The WGSL shaders are validated on every push and PR by
+[`.github/workflows/validate.yml`](.github/workflows/validate.yml), which runs
+[`naga`](https://github.com/gfx-rs/wgpu/tree/trunk/naga) (the same shader translator
+wgpu uses) over `src/*.wgsl`, so a shader that wouldn't compile can't land.
+
+## Design
+
+See **[DESIGN.md](DESIGN.md)** for why the neighbour search is brute-force O(n²) on
+the GPU (and a spatial grid on the CPU fallback), how the ping-pong buffers keep the
+read snapshot consistent, an honest note on performance, and the explicit non-goals.
 
 ## License
 
