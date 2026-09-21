@@ -5,6 +5,10 @@ neighbour search, the steering, the integration, and the draw — runs on the GP
 This document explains the decisions behind that, the trade-offs I made on purpose,
 and the things it deliberately does **not** try to be.
 
+![architecture](docs/diagrams/architecture.png)
+
+*The whole system on one page. Source: [docs/diagrams/architecture.svg](docs/diagrams/architecture.svg).*
+
 ## The one idea
 
 Keep the particles on the GPU for their whole lifetime and never copy them back.
